@@ -101,6 +101,22 @@
   .lang-btn:hover { background: var(--surface-dim); }
   .lang-btn.active { background: var(--text-primary); color: var(--surface); }
   .lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .refresh-btn {
+    font-family: var(--font-body);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s var(--ease-out);
+    flex-shrink: 0;
+  }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .refresh-btn svg { width: 18px; height: 18px; }
+  .refresh-btn.spinning svg { animation: spin 0.7s linear infinite; }
 
   .container {
     max-width: 1200px;
@@ -318,6 +334,9 @@
       <button class="lang-btn" data-lang="fr">FR</button>
       <button class="lang-btn" data-lang="zh">中</button>
     </div>
+    <button class="refresh-btn" id="refresh-btn" aria-label="Refresh" title="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
     <select id="gas-select" class="region-select" disabled aria-label="Select fuel type">
       <option value="">Loading&hellip;</option>
     </select>
@@ -386,6 +405,7 @@ const I18N = {
     selectFuel: "Fuel type",
     allFuels: "All fuel types",
     navigate: "Navigate",
+    refresh: "Refresh",
     source: "Régie de l\u2019énergie du Québec",
   },
   fr: {
@@ -427,6 +447,7 @@ const I18N = {
     navigate: "Naviguer",
     selectFuel: "Type de carburant",
     allFuels: "Tous les carburants",
+    refresh: "Actualiser",
     source: "Régie de l\u2019énergie du Québec",
   },
   zh: {
@@ -468,6 +489,7 @@ const I18N = {
     navigate: "导航",
     selectFuel: "燃油类型",
     allFuels: "全部燃油类型",
+    refresh: "刷新",
     source: "魁北克能源管理局",
   }
 };
@@ -481,6 +503,8 @@ function applyStaticLang() {
   document.getElementById("page-title").textContent = t("title");
   document.getElementById("region-select").setAttribute("aria-label", t("selectRegion"));
   document.getElementById("gas-select").setAttribute("aria-label", t("selectFuel"));
+  const refreshBtn = document.getElementById("refresh-btn");
+  if (refreshBtn) { refreshBtn.setAttribute("aria-label", t("refresh")); refreshBtn.title = t("refresh"); }
   document.querySelectorAll(".lang-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.lang === currentLang);
   });
@@ -907,6 +931,13 @@ function applyStaticLang() {
         render(curRegion);
         if (lastGeoPos) renderNearby(lastGeoPos.lat, lastGeoPos.lng);
       });
+    });
+
+    document.getElementById("refresh-btn").addEventListener("click", () => {
+      const btn = document.getElementById("refresh-btn");
+      btn.classList.add("spinning");
+      btn.disabled = true;
+      location.reload();
     });
 
     if (navigator.geolocation) {
