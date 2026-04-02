@@ -137,6 +137,14 @@
   .nearby-other .other-price { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-primary); min-width: 44px; }
   .nearby-other .other-dist { color: var(--text-tertiary); min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
   .nearby-other .other-brand { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-link { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-body); font-size: 0.72rem; font-weight: 700; color: var(--accent); text-decoration: none; padding: 3px 10px; border: 1.5px solid var(--accent); border-radius: 20px; transition: all 0.15s var(--ease-out); white-space: nowrap; line-height: 1.3; }
+  .nav-link:hover { background: var(--accent); color: var(--surface); }
+  .nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .nav-link svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .nearby-detail .nav-link { margin-top: 6px; }
+  .nearby-other .nav-link { padding: 2px 8px; font-size: 0.65rem; border-width: 1px; }
+  .map-popup-nav { margin-top: 6px; }
+  .map-popup-nav .nav-link { font-size: 0.75rem; padding: 4px 12px; }
 
   /* Metrics — horizontal strip, not cards */
   .metrics {
@@ -377,6 +385,7 @@ const I18N = {
     thVsAvg: "vs avg",
     selectFuel: "Fuel type",
     allFuels: "All fuel types",
+    navigate: "Navigate",
     source: "Régie de l\u2019énergie du Québec",
   },
   fr: {
@@ -415,6 +424,7 @@ const I18N = {
     thRegion: "Région",
     thPrice: "Prix",
     thVsAvg: "vs moy.",
+    navigate: "Naviguer",
     selectFuel: "Type de carburant",
     allFuels: "Tous les carburants",
     source: "Régie de l\u2019énergie du Québec",
@@ -455,6 +465,7 @@ const I18N = {
     thRegion: "地区",
     thPrice: "价格",
     thVsAvg: "vs 均价",
+    navigate: "导航",
     selectFuel: "燃油类型",
     allFuels: "全部燃油类型",
     source: "魁北克能源管理局",
@@ -510,6 +521,13 @@ function applyStaticLang() {
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
+    // Maps URL — opens Apple Maps on iOS, Google Maps on Android/desktop
+    function navUrl(lat, lng, label) {
+      const q = encodeURIComponent(label || `${lat},${lng}`);
+      return `https://maps.apple.com/?daddr=${lat},${lng}&q=${q}`;
+    }
+    const navSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>';
+
     function renderNearby(lat, lng) {
       lastGeoPos = { lat, lng };
       const gasStations = stationsByGas();
@@ -543,7 +561,8 @@ function applyStaticLang() {
             <div class="nearby-price">${cheapest.price.toFixed(1)}&#162;/L</div>
             <div class="nearby-detail">
               <strong>${cheapest.brand}</strong> &middot; ${cheapest.address}<br>
-              ${cheapest.region} &middot; ${fmtDist(cheapest.dist)}${awayStr ? " " + awayStr : ""}
+              ${cheapest.region} &middot; ${fmtDist(cheapest.dist)}${awayStr ? " " + awayStr : ""}<br>
+              <a class="nav-link" href="${navUrl(cheapest.lat, cheapest.lng, cheapest.brand + ' ' + cheapest.address)}" target="_blank" rel="noopener">${navSvg} ${t("navigate")}</a>
             </div>
           </div>
           <div class="nearby-others">
@@ -552,6 +571,7 @@ function applyStaticLang() {
                 <span class="other-price">${s.price.toFixed(1)}&#162;</span>
                 <span class="other-brand" title="${s.brand}">${s.brand}</span>
                 <span class="other-dist">${fmtDist(s.dist)}</span>
+                <a class="nav-link" href="${navUrl(s.lat, s.lng, s.brand + ' ' + s.address)}" target="_blank" rel="noopener">${navSvg}</a>
               </div>`).join("")}
           </div>
         </div>`;
@@ -793,6 +813,7 @@ function applyStaticLang() {
             <div class="map-popup-addr">${s.address}</div>
             <div style="font-size:0.7rem;color:#888;margin-top:2px">${s.region}</div>
             <div class="map-popup-rank" style="background:${color}18;color:${color}">#${rankIdx}/${stations.length} (${diffStr}\u00a2)</div>
+            <div class="map-popup-nav"><a class="nav-link" href="${navUrl(s.lat, s.lng, s.brand + ' ' + s.address)}" target="_blank" rel="noopener">${navSvg} ${t("navigate")}</a></div>
           </div>`, { closeButton: false });
         marker.addTo(activeMarkers);
       });
