@@ -131,6 +131,14 @@
   .spinner { display: inline-block; width: 28px; height: 28px; border: 2.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-bottom: 12px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Skeleton */
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .skel { border-radius: 4px; background: linear-gradient(90deg, var(--border) 25%, var(--surface-dim) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+  .skel-nearby { display: flex; align-items: center; gap: clamp(12px, 2vw, 24px); flex-wrap: wrap; padding: clamp(14px, 2vw, 24px); background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0; margin-bottom: clamp(24px, 3vw, 40px); animation: slideIn 0.5s var(--ease-out) both; }
+  .skel-nearby .skel { background: linear-gradient(90deg, oklch(85% 0.03 160 / 0.5) 25%, oklch(92% 0.02 160 / 0.4) 50%, oklch(85% 0.03 160 / 0.5) 75%); background-size: 200% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+  .skel-lines { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 8px; }
+  .skel-others { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+
   /* Nearby — featured recommendation, not a card */
   .nearby-banner {
     display: flex; align-items: center; gap: clamp(12px, 2vw, 24px); flex-wrap: wrap;
@@ -435,6 +443,7 @@ const I18N = {
     navigate: "Navigate",
     refresh: "Refresh",
     clusterMed: "med",
+    straightLine: "Straight-line distance (routing unavailable)",
     source: "Source: Régie de l\u2019énergie du Québec",
   },
   fr: {
@@ -480,6 +489,7 @@ const I18N = {
     allFuels: "Tous les carburants",
     refresh: "Actualiser",
     clusterMed: "méd",
+    straightLine: "Distance à vol d\u2019oiseau (routage indisponible)",
     source: "Source: Régie de l\u2019énergie du Québec",
   },
   zh: {
@@ -525,6 +535,7 @@ const I18N = {
     allFuels: "全部燃油类型",
     refresh: "刷新",
     clusterMed: "中位",
+    straightLine: "当前为直线距离（路线规划不可用）",
     source: "数据来源：魁北克能源管理局",
   }
 };
@@ -588,42 +599,33 @@ function applyStaticLang() {
     }
     const navSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>';
 
-    function renderNearby(lat, lng) {
-      lastGeoPos = { lat, lng };
+    function renderNearbySkeleton() {
       const radiusKm = Number(document.getElementById("radius-select").value) || 5;
-      const gasStations = stationsByGas();
-      const withDist = gasStations
-        .filter(s => s.lat && s.lng)
-        .map(s => ({ ...s, dist: haversine(lat, lng, s.lat, s.lng) }));
+      document.getElementById("nearby-container").innerHTML = `
+        <div class="skel-nearby">
+          <div style="font-size:1.8rem;flex-shrink:0;line-height:1">&#xFE0E;&#x26FD;</div>
+          <div class="skel-lines">
+            <div class="skel" style="width:100px;height:10px"></div>
+            <div class="skel" style="width:140px;height:28px"></div>
+            <div class="skel" style="width:200px;height:12px"></div>
+            <div class="skel" style="width:160px;height:12px"></div>
+          </div>
+          <div class="skel-others">
+            <div class="skel" style="width:180px;height:14px"></div>
+            <div class="skel" style="width:180px;height:14px"></div>
+            <div class="skel" style="width:180px;height:14px"></div>
+            <div class="skel" style="width:180px;height:14px"></div>
+          </div>
+        </div>`;
+    }
 
-      const nearest = withDist.slice().sort((a, b) => a.dist - b.dist)[0];
-      if (nearest && nearest.region) {
-        const sel = document.getElementById("region-select");
-        if (sel.querySelector(`option[value="${nearest.region}"]`)) {
-          sel.value = nearest.region;
-          render(nearest.region);
-        }
-      }
-
-      const inRadius = withDist.filter(s => s.dist <= radiusKm);
-      const top5 = inRadius.sort((a, b) => a.price - b.price).slice(0, 5);
-      if (!top5.length) {
-        document.getElementById("nearby-container").innerHTML = `
-          <div class="nearby-banner error-state">
-            <div class="nearby-icon">&#x26FD;&#xFE0E;</div>
-            <div class="nearby-main">
-              <div class="nearby-title">${t("nearbyTitle").replace("{r}", radiusKm)}</div>
-              <div class="nearby-detail">${t("nearbyNone").replace("{r}", radiusKm)}</div>
-            </div>
-          </div>`;
-        return;
-      }
-
-      const cheapest = top5.slice().sort((a, b) => a.price - b.price)[0];
-      const others = top5.filter(s => s !== cheapest).sort((a, b) => a.price - b.price);
+    function renderNearbyUI(top5, straightLine) {
+      const radiusKm = Number(document.getElementById("radius-select").value) || 5;
+      const cheapest = top5[0];
+      const others = top5.slice(1);
       const fmtDist = d => d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`;
-
       const awayStr = t("nearbyAway");
+      const hint = straightLine ? `<div style="font-size:0.68rem;color:var(--text-tertiary);margin-top:6px;font-style:italic">${t("straightLine")}</div>` : "";
       document.getElementById("nearby-container").innerHTML = `
         <div class="nearby-banner">
           <div class="nearby-icon">&#xFE0E;&#x26FD;</div>
@@ -645,7 +647,69 @@ function applyStaticLang() {
                 <a class="nav-link" href="${navUrl(s.lat, s.lng, s.brand + ' ' + s.address)}" target="_blank" rel="noopener">${navSvg}</a>
               </div>`).join("")}
           </div>
-        </div>`;
+        </div>${hint}`;
+    }
+
+    function renderNearby(lat, lng) {
+      lastGeoPos = { lat, lng };
+      const radiusKm = Number(document.getElementById("radius-select").value) || 5;
+      const gasStations = stationsByGas();
+      const withDist = gasStations
+        .filter(s => s.lat && s.lng)
+        .map(s => ({ ...s, dist: haversine(lat, lng, s.lat, s.lng) }));
+
+      const nearest = withDist.slice().sort((a, b) => a.dist - b.dist)[0];
+      if (nearest && nearest.region) {
+        const sel = document.getElementById("region-select");
+        if (sel.querySelector(`option[value="${nearest.region}"]`)) {
+          sel.value = nearest.region;
+          render(nearest.region);
+        }
+      }
+
+      const inRadius = withDist.filter(s => s.dist <= radiusKm);
+      if (!inRadius.length) {
+        document.getElementById("nearby-container").innerHTML = `
+          <div class="nearby-banner error-state">
+            <div class="nearby-icon">&#x26FD;&#xFE0E;</div>
+            <div class="nearby-main">
+              <div class="nearby-title">${t("nearbyTitle").replace("{r}", radiusKm)}</div>
+              <div class="nearby-detail">${t("nearbyNone").replace("{r}", radiusKm)}</div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      renderNearbySkeleton();
+
+      const noResult = () => {
+        document.getElementById("nearby-container").innerHTML = `
+          <div class="nearby-banner error-state">
+            <div class="nearby-icon">&#x26FD;&#xFE0E;</div>
+            <div class="nearby-main">
+              <div class="nearby-title">${t("nearbyTitle").replace("{r}", radiusKm)}</div>
+              <div class="nearby-detail">${t("nearbyNone").replace("{r}", radiusKm)}</div>
+            </div>
+          </div>`;
+      };
+      const candidates = inRadius.sort((a, b) => a.price - b.price).slice(0, 50);
+      const coords = `${lng},${lat};` + candidates.map(s => `${s.lng},${s.lat}`).join(";");
+      fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.code !== "Ok") throw new Error(data.code);
+          const top5 = candidates
+            .map((s, i) => ({ ...s, dist: data.distances[0][i + 1] / 1000 }))
+            .filter(s => s.dist <= radiusKm)
+            .sort((a, b) => a.price - b.price || a.dist - b.dist)
+            .slice(0, 5);
+          if (!top5.length) { noResult(); return; }
+          renderNearbyUI(top5);
+        })
+        .catch(() => {
+          const top5 = candidates.slice(0, 5);
+          renderNearbyUI(top5, true);
+        });
     }
 
     const regions = [...new Set(allStations.map(s => s.region))].filter(Boolean).sort((a, b) => a.localeCompare(b, "fr"));
