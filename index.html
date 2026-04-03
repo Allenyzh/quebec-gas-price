@@ -934,6 +934,7 @@ function applyStaticLang() {
         document.getElementById("map-count").textContent = `${mapStations.length} ${t("pins")}`;
       }
       if (mapStations.length) {
+        activeMap.invalidateSize();
         activeMap.fitBounds(L.latLngBounds(mapStations.map(s => [s.lat, s.lng])), { padding: [30, 30] });
       }
 
