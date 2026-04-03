@@ -13,6 +13,8 @@
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;0,9..144,900;1,9..144,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -278,6 +280,21 @@
   .price-mid { color: var(--warm); font-weight: 700; }
   .price-high { color: var(--danger); font-weight: 700; }
 
+  /* Cluster icons */
+  .marker-cluster-custom {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border-radius: 50%; border: 2.5px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    font-family: var(--font-body);
+    color: white; text-align: center; line-height: 1.15;
+  }
+  .marker-cluster-custom .cluster-count {
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .marker-cluster-custom .cluster-price {
+    font-size: 0.52rem; font-weight: 600; opacity: 0.92; white-space: nowrap;
+  }
+
   /* Entrance animation */
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   .anim-in { animation: fadeUp 0.45s var(--ease-out) both; }
@@ -294,7 +311,9 @@
   }
 
   /* Responsive */
+  .subtitle-break { display: none; }
   @media (max-width: 640px) {
+    .subtitle-break { display: block; }
     .header { flex-direction: column; align-items: stretch; gap: 8px; }
     .region-select { width: 100%; min-width: 0; }
     .metrics { flex-direction: column; gap: 0; border-top-width: 1.5px; }
@@ -343,6 +362,13 @@
     <select id="region-select" class="region-select" disabled aria-label="Select region">
       <option value="">Loading&hellip;</option>
     </select>
+    <select id="radius-select" class="region-select" aria-label="Nearby radius">
+      <option value="5">5 km</option>
+      <option value="10">10 km</option>
+      <option value="15">15 km</option>
+      <option value="25">25 km</option>
+      <option value="50">50 km</option>
+    </select>
   </div>
 </header>
 
@@ -374,7 +400,9 @@ const I18N = {
     allRegions: "All regions",
     selectRegion: "Select region",
     noData: "No data for this region.",
-    nearbyTitle: "Best price nearby",
+    nearbyTitle: "Best price within {r}\u2009km",
+    nearbyRadius: "Radius",
+    nearbyNone: "No stations within {r}\u2009km.",
     nearbyAway: "away",
     nearbyError: "Location unavailable",
     nearbyErrorDetail: "Allow location access to see the cheapest station near you.",
@@ -406,7 +434,8 @@ const I18N = {
     allFuels: "All fuel types",
     navigate: "Navigate",
     refresh: "Refresh",
-    source: "Régie de l\u2019énergie du Québec",
+    clusterMed: "med",
+    source: "Source: Régie de l\u2019énergie du Québec",
   },
   fr: {
     title: "Moniteur de carburant \u2014 Québec",
@@ -416,7 +445,9 @@ const I18N = {
     allRegions: "Toutes les régions",
     selectRegion: "Sélectionner une région",
     noData: "Aucune donnée pour cette région.",
-    nearbyTitle: "Meilleur prix à proximité",
+    nearbyTitle: "Meilleur prix dans {r}\u2009km",
+    nearbyRadius: "Rayon",
+    nearbyNone: "Aucune station dans {r}\u2009km.",
     nearbyAway: "de distance",
     nearbyError: "Position indisponible",
     nearbyErrorDetail: "Autorisez la géolocalisation pour voir la station la moins chère près de vous.",
@@ -448,7 +479,8 @@ const I18N = {
     selectFuel: "Type de carburant",
     allFuels: "Tous les carburants",
     refresh: "Actualiser",
-    source: "Régie de l\u2019énergie du Québec",
+    clusterMed: "méd",
+    source: "Source: Régie de l\u2019énergie du Québec",
   },
   zh: {
     title: "魁北克油价监测",
@@ -458,7 +490,9 @@ const I18N = {
     allRegions: "全部地区",
     selectRegion: "选择地区",
     noData: "该地区暂无数据",
-    nearbyTitle: "附近最便宜",
+    nearbyTitle: "{r}\u2009km 内最低价",
+    nearbyRadius: "半径",
+    nearbyNone: "{r}\u2009km 内无加油站",
     nearbyAway: "",
     nearbyError: "无法获取位置",
     nearbyErrorDetail: "请允许浏览器定位以查看附近最便宜的加油站",
@@ -490,7 +524,8 @@ const I18N = {
     selectFuel: "燃油类型",
     allFuels: "全部燃油类型",
     refresh: "刷新",
-    source: "魁北克能源管理局",
+    clusterMed: "中位",
+    source: "数据来源：魁北克能源管理局",
   }
 };
 
@@ -505,6 +540,7 @@ function applyStaticLang() {
   document.getElementById("gas-select").setAttribute("aria-label", t("selectFuel"));
   const refreshBtn = document.getElementById("refresh-btn");
   if (refreshBtn) { refreshBtn.setAttribute("aria-label", t("refresh")); refreshBtn.title = t("refresh"); }
+  document.getElementById("radius-select").setAttribute("aria-label", t("nearbyRadius"));
   document.querySelectorAll(".lang-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.lang === currentLang);
   });
@@ -518,7 +554,7 @@ function applyStaticLang() {
     const allStations = data.features
       .flatMap(f =>
         (f.properties.Prices ?? []).map(p => ({
-          brand: f.properties.brand ?? f.properties.Name,
+          brand: (f.properties.brand && f.properties.brand !== "Aucun") ? f.properties.brand : f.properties.Name,
           address: f.properties.Address,
           region: (f.properties.Region ?? "").normalize("NFC").trim(),
           type: (p.GasType ?? "").normalize("NFC").trim(),
@@ -554,13 +590,13 @@ function applyStaticLang() {
 
     function renderNearby(lat, lng) {
       lastGeoPos = { lat, lng };
+      const radiusKm = Number(document.getElementById("radius-select").value) || 5;
       const gasStations = stationsByGas();
       const withDist = gasStations
         .filter(s => s.lat && s.lng)
-        .map(s => ({ ...s, dist: haversine(lat, lng, s.lat, s.lng) }))
-        .sort((a, b) => a.dist - b.dist);
+        .map(s => ({ ...s, dist: haversine(lat, lng, s.lat, s.lng) }));
 
-      const nearest = withDist[0];
+      const nearest = withDist.slice().sort((a, b) => a.dist - b.dist)[0];
       if (nearest && nearest.region) {
         const sel = document.getElementById("region-select");
         if (sel.querySelector(`option[value="${nearest.region}"]`)) {
@@ -569,8 +605,19 @@ function applyStaticLang() {
         }
       }
 
-      const top5 = withDist.slice(0, 5);
-      if (!top5.length) { document.getElementById("nearby-container").innerHTML = ""; return; }
+      const inRadius = withDist.filter(s => s.dist <= radiusKm);
+      const top5 = inRadius.sort((a, b) => a.price - b.price).slice(0, 5);
+      if (!top5.length) {
+        document.getElementById("nearby-container").innerHTML = `
+          <div class="nearby-banner error-state">
+            <div class="nearby-icon">&#x26FD;&#xFE0E;</div>
+            <div class="nearby-main">
+              <div class="nearby-title">${t("nearbyTitle").replace("{r}", radiusKm)}</div>
+              <div class="nearby-detail">${t("nearbyNone").replace("{r}", radiusKm)}</div>
+            </div>
+          </div>`;
+        return;
+      }
 
       const cheapest = top5.slice().sort((a, b) => a.price - b.price)[0];
       const others = top5.filter(s => s !== cheapest).sort((a, b) => a.price - b.price);
@@ -581,7 +628,7 @@ function applyStaticLang() {
         <div class="nearby-banner">
           <div class="nearby-icon">&#xFE0E;&#x26FD;</div>
           <div class="nearby-main">
-            <div class="nearby-title">${t("nearbyTitle")}</div>
+            <div class="nearby-title">${t("nearbyTitle").replace("{r}", radiusKm)}</div>
             <div class="nearby-price">${cheapest.price.toFixed(1)}&#162;/L</div>
             <div class="nearby-detail">
               <strong>${cheapest.brand}</strong> &middot; ${cheapest.address}<br>
@@ -688,8 +735,9 @@ function applyStaticLang() {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19,
     }).addTo(activeMap);
-    let activeMarkers = L.layerGroup().addTo(activeMap);
+    let activeMarkers = null;
     let lastGeoPos = null;
+    let currentMapMeta = {};
 
     function priceToColor(p, mn, mx) {
       const t = Math.min(Math.max((p - mn) / (mx - mn || 1), 0), 1);
@@ -737,7 +785,7 @@ function applyStaticLang() {
         document.getElementById("metrics").innerHTML = `<p style="color:var(--text-tertiary);padding:20px 0">${t("noData")}</p>`;
         ["brand-chart","dist-chart","dist-labels","station-tbody"].forEach(id => document.getElementById(id).innerHTML = "");
         document.getElementById("count-badge").textContent = "";
-        activeMarkers.clearLayers();
+        if (activeMarkers) { activeMap.removeLayer(activeMarkers); activeMarkers = null; }
         return;
       }
 
@@ -758,8 +806,8 @@ function applyStaticLang() {
       const now = new Date();
       const dateLoc = currentLang === "zh" ? "zh-CN" : "fr-CA";
       const regionLabel = regionKey === "__all__" ? t("allRegions") : regionKey;
-      document.getElementById("subtitle").textContent =
-        `${t("source")} \u00b7 ${regionLabel} \u00b7 ${now.toLocaleDateString(dateLoc)} ${now.toLocaleTimeString(dateLoc, {hour:"2-digit",minute:"2-digit"})} \u00b7 ${stations.length} ${t("stations").toLowerCase()}`;
+      document.getElementById("subtitle").innerHTML =
+        `${t("source")} \u00b7 <span class="subtitle-break"></span>${regionLabel} \u00b7 ${now.toLocaleDateString(dateLoc)} ${now.toLocaleTimeString(dateLoc, {hour:"2-digit",minute:"2-digit"})} \u00b7 ${stations.length} ${t("stations").toLowerCase()}`;
 
       // Metrics strip
       const regionWord = regionCount > 1 ? t("regions") : t("region");
@@ -821,13 +869,18 @@ function applyStaticLang() {
         return `<span></span>`;
       }).join("");
 
-      // Map
-      activeMarkers.clearLayers();
+      // Map — cluster summarization for large datasets
+      if (activeMarkers) { activeMap.removeLayer(activeMarkers); activeMarkers = null; }
       const mapStations = stations.filter(s => s.lat && s.lng);
-      mapStations.forEach(s => {
-        const rankIdx = stations.indexOf(s) + 1;
-        const color = priceToColor(s.price, min, max);
-        const diff = s.price - avg;
+      currentMapMeta = { min, max, avg, total: stations.length, stations };
+
+      const CLUSTER_THRESHOLD = 300;
+      const useCluster = mapStations.length > CLUSTER_THRESHOLD;
+
+      function makeMarker(s) {
+        const rankIdx = currentMapMeta.stations.indexOf(s) + 1;
+        const color = priceToColor(s.price, currentMapMeta.min, currentMapMeta.max);
+        const diff = s.price - currentMapMeta.avg;
         const diffStr = diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
         const marker = L.marker([s.lat, s.lng], { icon: createMarkerIcon(color) });
         marker.bindPopup(`
@@ -836,12 +889,50 @@ function applyStaticLang() {
             <div class="map-popup-price" style="color:${color}">${s.price.toFixed(1)}\u00a2/L</div>
             <div class="map-popup-addr">${s.address}</div>
             <div style="font-size:0.7rem;color:#888;margin-top:2px">${s.region}</div>
-            <div class="map-popup-rank" style="background:${color}18;color:${color}">#${rankIdx}/${stations.length} (${diffStr}\u00a2)</div>
+            <div class="map-popup-rank" style="background:${color}18;color:${color}">#${rankIdx}/${currentMapMeta.total} (${diffStr}\u00a2)</div>
             <div class="map-popup-nav"><a class="nav-link" href="${navUrl(s.lat, s.lng, s.brand + ' ' + s.address)}" target="_blank" rel="noopener">${navSvg} ${t("navigate")}</a></div>
           </div>`, { closeButton: false });
-        marker.addTo(activeMarkers);
-      });
-      document.getElementById("map-count").textContent = `${mapStations.length} ${t("pins")}`;
+        marker._stationPrice = s.price;
+        return marker;
+      }
+
+      function clusterColor(avgP) {
+        return priceToColor(avgP, currentMapMeta.min, currentMapMeta.max);
+      }
+
+      if (useCluster) {
+        activeMarkers = L.markerClusterGroup({
+          maxClusterRadius: 55,
+          disableClusteringAtZoom: 13,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          chunkedLoading: true,
+          iconCreateFunction: function(cluster) {
+            const children = cluster.getAllChildMarkers();
+            const count = children.length;
+            const sorted = children.map(m => m._stationPrice).sort((a, b) => a - b);
+            const medP = count % 2 === 0 ? (sorted[count / 2 - 1] + sorted[count / 2]) / 2 : sorted[Math.floor(count / 2)];
+            const bg = clusterColor(medP);
+            const size = count < 20 ? 40 : count < 100 ? 48 : 56;
+            return L.divIcon({
+              html: `<div class="marker-cluster-custom" style="width:${size}px;height:${size}px;background:${bg}">
+                <span class="cluster-count">${count}</span>
+                <span class="cluster-price">${t("clusterMed")} ${medP.toFixed(1)}\u00a2</span>
+              </div>`,
+              className: '',
+              iconSize: L.point(size, size),
+            });
+          }
+        });
+        mapStations.forEach(s => activeMarkers.addLayer(makeMarker(s)));
+        activeMap.addLayer(activeMarkers);
+        document.getElementById("map-count").textContent = `${mapStations.length} ${t("pins")}`;
+      } else {
+        activeMarkers = L.layerGroup();
+        mapStations.forEach(s => makeMarker(s).addTo(activeMarkers));
+        activeMarkers.addTo(activeMap);
+        document.getElementById("map-count").textContent = `${mapStations.length} ${t("pins")}`;
+      }
       if (mapStations.length) {
         activeMap.fitBounds(L.latLngBounds(mapStations.map(s => [s.lat, s.lng])), { padding: [30, 30] });
       }
@@ -906,6 +997,9 @@ function applyStaticLang() {
       currentGasType = gasSelect.value;
       triggerRender();
     });
+    document.getElementById("radius-select").addEventListener("change", () => {
+      if (lastGeoPos) renderNearby(lastGeoPos.lat, lastGeoPos.lng);
+    });
 
     // Language switcher
     document.querySelectorAll(".lang-btn").forEach(btn => {
@@ -926,7 +1020,7 @@ function applyStaticLang() {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
           maxZoom: 19,
         }).addTo(activeMap);
-        activeMarkers = L.layerGroup().addTo(activeMap);
+        activeMarkers = null;
 
         render(curRegion);
         if (lastGeoPos) renderNearby(lastGeoPos.lat, lastGeoPos.lng);
