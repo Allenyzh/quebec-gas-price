@@ -1034,6 +1034,13 @@ function applyStaticLang() {
       location.reload();
     });
 
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) {
+        const btn = document.getElementById("refresh-btn");
+        if (btn) { btn.classList.remove("spinning"); btn.disabled = false; }
+      }
+    });
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         pos => renderNearby(pos.coords.latitude, pos.coords.longitude),
