@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 
 const STORAGE_KEY = "fuel-consent-dismissed";
+const MOTION_KEY = "fuel-reduce-motion";
+
+function applyMotionPref(on: boolean) {
+  document.documentElement.classList.toggle("reduced-motion", on);
+}
 
 interface ConsentBannerProps {
   t: (key: string) => string;
@@ -10,6 +15,13 @@ export function ConsentBanner({ t }: ConsentBannerProps) {
   const [visible, setVisible] = useState(
     () => !localStorage.getItem(STORAGE_KEY),
   );
+  const [reduceMotion, setReduceMotion] = useState(
+    () => localStorage.getItem(MOTION_KEY) === "1",
+  );
+
+  useEffect(() => {
+    applyMotionPref(reduceMotion);
+  }, [reduceMotion]);
 
   useEffect(() => {
     if (visible) {
@@ -36,12 +48,26 @@ export function ConsentBanner({ t }: ConsentBannerProps) {
     setVisible(false);
   };
 
+  const toggleMotion = () => {
+    const next = !reduceMotion;
+    setReduceMotion(next);
+    localStorage.setItem(MOTION_KEY, next ? "1" : "0");
+  };
+
   return (
     <>
       {visible && (
         <div className="consent-overlay">
           <div className="consent-banner">
             <p className="consent-msg">{t("consentMsg")}</p>
+            <label className="consent-toggle">
+              <input
+                type="checkbox"
+                checked={reduceMotion}
+                onChange={toggleMotion}
+              />
+              <span>{t("reduceMotion")}</span>
+            </label>
             <button className="consent-btn" onClick={dismiss}>
               {t("consentOk")}
             </button>

@@ -48,6 +48,7 @@ const I18N: Record<Lang, Record<string, string>> = {
     source: "Source: R\u00e9gie de l\u2019\u00e9nergie du Qu\u00e9bec",
     consentMsg: "This app uses your location to find nearby gas stations. All data is processed locally and never sent to any third party.",
     consentOk: "Got it",
+    reduceMotion: "Reduce animations",
   },
   fr: {
     title: "Moniteur de carburant \u2014 Qu\u00e9bec",
@@ -96,6 +97,7 @@ const I18N: Record<Lang, Record<string, string>> = {
     source: "Source: R\u00e9gie de l\u2019\u00e9nergie du Qu\u00e9bec",
     consentMsg: "Cette application utilise votre position pour trouver les stations-service \u00e0 proximit\u00e9. Toutes les donn\u00e9es sont trait\u00e9es localement et ne sont jamais envoy\u00e9es \u00e0 des tiers.",
     consentOk: "Compris",
+    reduceMotion: "Réduire les animations",
   },
   zh: {
     title: "\u9b41\u5317\u514b\u6cb9\u4ef7\u76d1\u6d4b",
@@ -143,7 +145,8 @@ const I18N: Record<Lang, Record<string, string>> = {
     straightLine: "\u5f53\u524d\u4e3a\u76f4\u7ebf\u8ddd\u79bb\uff08\u8def\u7ebf\u89c4\u5212\u4e0d\u53ef\u7528\uff09",
     source: "\u6570\u636e\u6765\u6e90\uff1a\u9b41\u5317\u514b\u80fd\u6e90\u7ba1\u7406\u5c40",
     consentMsg: "\u672c\u5e94\u7528\u4f1a\u8bfb\u53d6\u60a8\u7684\u4f4d\u7f6e\u4fe1\u606f\u4ee5\u67e5\u627e\u9644\u8fd1\u52a0\u6cb9\u7ad9\u3002\u6240\u6709\u6570\u636e\u5747\u5728\u672c\u5730\u5904\u7406\uff0c\u4e0d\u4f1a\u53d1\u9001\u5230\u4efb\u4f55\u7b2c\u4e09\u65b9\u3002",
-    consentOk: "\u77e5\u9053\u4e86",
+    consentOk: "知道了",
+    reduceMotion: "减弱动画效果",
   },
 };
 

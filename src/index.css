@@ -373,12 +373,10 @@ tr:hover td { background: var(--surface-dim); }
 .anim-d3 { animation-delay: 0.15s; }
 .anim-d4 { animation-delay: 0.2s; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.15s !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.15s !important;
-  }
+.reduced-motion *, .reduced-motion *::before, .reduced-motion *::after {
+  animation-duration: 0.15s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.15s !important;
 }
 
 /* Consent banner */
@@ -410,6 +408,14 @@ tr:hover td { background: var(--surface-dim); }
   transition: opacity .15s;
 }
 .consent-btn:hover { opacity: .85; }
+.consent-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; color: var(--text-secondary);
+  cursor: pointer; white-space: nowrap; user-select: none;
+}
+.consent-toggle input {
+  width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+}
 @keyframes consent-slide-up {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
