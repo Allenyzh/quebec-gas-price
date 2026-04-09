@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8e4df"/>
+      <stop offset="100%" stop-color="#d5cec6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Gas pump - line art style -->
+  <g fill="none" stroke="#8a7e72" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- Pump body -->
+    <rect x="148" y="152" width="152" height="220" rx="20"/>
+
+    <!-- Display screen -->
+    <rect x="178" y="186" width="92" height="60" rx="10"/>
+
+    <!-- Display content lines -->
+    <line x1="196" y1="210" x2="252" y2="210" stroke-width="7" opacity="0.45"/>
+    <line x1="206" y1="228" x2="242" y2="228" stroke-width="5" opacity="0.3"/>
+
+    <!-- Base/ground line -->
+    <line x1="132" y1="372" x2="316" y2="372"/>
+
+    <!-- Hose arm -->
+    <path d="M300 200 L332 200 Q348 200 348 216 L348 268 Q348 288 332 296 L332 296"/>
+
+    <!-- Nozzle -->
+    <line x1="332" y1="296" x2="372" y2="318" stroke-width="13"/>
+    <line x1="372" y1="318" x2="386" y2="310" stroke-width="9"/>
+
+    <!-- Fuel drop -->
+    <path d="M224 300 Q224 280 236 268 Q248 280 248 300 Q248 312 236 316 Q224 312 224 300Z" stroke-width="8" fill="#b5a99a" fill-opacity="0.3"/>
+
+  </g>
+</svg>
