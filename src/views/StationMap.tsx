@@ -37,18 +37,33 @@ const userPosIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
+const routeCache = new Map<string, [number, number][]>();
+
+function routeCacheKey(
+  fromLat: number, fromLng: number, toLat: number, toLng: number,
+): string {
+  // Round to ~11m precision to avoid near-duplicate entries
+  const r = (n: number) => n.toFixed(4);
+  return `${r(fromLat)},${r(fromLng)};${r(toLat)},${r(toLng)}`;
+}
+
 async function fetchRoute(
   fromLat: number, fromLng: number, toLat: number, toLng: number,
 ): Promise<[number, number][] | null> {
+  const key = routeCacheKey(fromLat, fromLng, toLat, toLng);
+  const cached = routeCache.get(key);
+  if (cached) return cached;
   try {
     const resp = await fetch(
       `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`,
     );
     const data = await resp.json();
     if (data.code !== "Ok" || !data.routes?.[0]) return null;
-    return data.routes[0].geometry.coordinates.map(
+    const coords = data.routes[0].geometry.coordinates.map(
       ([lng, lat]: [number, number]) => [lat, lng] as [number, number],
     );
+    routeCache.set(key, coords);
+    return coords;
   } catch {
     return null;
   }
