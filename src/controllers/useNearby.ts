@@ -114,5 +114,5 @@ export function useNearby(
     }
   }, [geoPos, computeNearby]);
 
-  return { state, geoPos };
+  return { state, geoPos, setGeoPos };
 }

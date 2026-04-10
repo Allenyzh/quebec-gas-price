@@ -13,6 +13,7 @@ interface StationMapProps {
   t: (key: string) => string;
   onNavigate: (target: NavTarget) => void;
   geoPos: { lat: number; lng: number } | null;
+  onGeoUpdate?: (pos: { lat: number; lng: number }) => void;
 }
 
 const CLUSTER_THRESHOLD = 300;
@@ -82,6 +83,7 @@ export function StationMap({
   t,
   onNavigate,
   geoPos,
+  onGeoUpdate,
 }: StationMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -295,11 +297,12 @@ export function StationMap({
           interactive: false,
         }).addTo(map);
         map.setView([lat, lng], 13, { animate: true });
+        onGeoUpdate?.({ lat, lng });
       },
       () => setLocating(false),
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, []);
+  }, [onGeoUpdate]);
 
   const mapStationCount = stations.filter((s) => s.lat && s.lng).length;
 

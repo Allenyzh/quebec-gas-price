@@ -50,7 +50,7 @@ function App() {
     [regions, setRegion],
   );
 
-  const { state: nearbyState, geoPos } = useNearby(
+  const { state: nearbyState, geoPos, setGeoPos } = useNearby(
     gasStations,
     radiusKm,
     onRegionDetected,
@@ -174,6 +174,7 @@ function App() {
               t={t}
               onNavigate={openNavModal}
               geoPos={geoPos}
+              onGeoUpdate={setGeoPos}
             />
 
             <StationTable
