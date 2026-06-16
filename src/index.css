@@ -1121,6 +1121,26 @@ tr:hover td {
   td {
     padding: 6px 8px;
   }
+  /* Mobile station list: only brand, address, price and nav button */
+  [data-col="rank"],
+  [data-col="region"],
+  [data-col="vsavg"] {
+    display: none;
+  }
+  .table-wrap {
+    overflow-x: hidden;
+  }
+  td[data-col="nav"] {
+    width: 1%;
+    white-space: nowrap;
+  }
+  td[data-col="nav"] .nav-link {
+    padding: 5px;
+    gap: 0;
+  }
+  td[data-col="nav"] .nav-link span {
+    display: none;
+  }
   .nearby-banner {
     gap: 10px;
   }

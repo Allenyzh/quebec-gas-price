@@ -82,7 +82,9 @@ export function StationTable({
         <table>
           <thead>
             <tr>
-              <th style={{ width: 44 }}>#</th>
+              <th data-col="rank" style={{ width: 44 }}>
+                #
+              </th>
               {SORT_COLS.map((col) => (
                 <th
                   key={col.key}
@@ -95,8 +97,8 @@ export function StationTable({
                   </span>
                 </th>
               ))}
-              <th>{t("thVsAvg")}</th>
-              <th aria-label={t("navigate")}></th>
+              <th data-col="vsavg">{t("thVsAvg")}</th>
+              <th data-col="nav" aria-label={t("navigate")}></th>
             </tr>
           </thead>
           <tbody>
@@ -108,19 +110,21 @@ export function StationTable({
                 diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
               return (
                 <tr key={`${s.brand}-${s.address}-${s.price}-${i}`}>
-                  <td>
+                  <td data-col="rank">
                     <span className={`rank${rc}`}>{rankIdx}</span>
                   </td>
-                  <td>{s.brand}</td>
-                  <td>{s.address}</td>
-                  <td style={{ color: "var(--text-tertiary)" }}>{s.region}</td>
-                  <td className={priceClass(s.price, min, max)}>
+                  <td data-col="brand">{s.brand}</td>
+                  <td data-col="address">{s.address}</td>
+                  <td data-col="region" style={{ color: "var(--text-tertiary)" }}>
+                    {s.region}
+                  </td>
+                  <td data-col="price" className={priceClass(s.price, min, max)}>
                     {s.price.toFixed(1)}&cent;
                   </td>
-                  <td style={{ color: "var(--text-tertiary)" }}>
+                  <td data-col="vsavg" style={{ color: "var(--text-tertiary)" }}>
                     {diffStr}&cent;
                   </td>
-                  <td>
+                  <td data-col="nav">
                     <button
                       type="button"
                       className="nav-link"
