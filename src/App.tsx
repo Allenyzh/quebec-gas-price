@@ -190,6 +190,7 @@ function App() {
               min={stats.min}
               max={stats.max}
               region={region}
+              onNavigate={openNavModal}
               t={t}
             />
           </>

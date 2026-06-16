@@ -1,5 +1,7 @@
 import type { Station, SortCol } from "../models/types";
 import { priceClass } from "../models/stations";
+import type { NavTarget } from "../controllers/useNavModal";
+import { Navigation } from "lucide-react";
 
 interface StationTableProps {
   stations: Station[];
@@ -14,6 +16,7 @@ interface StationTableProps {
   min: number;
   max: number;
   region: string;
+  onNavigate: (target: NavTarget) => void;
   t: (key: string) => string;
 }
 
@@ -37,6 +40,7 @@ export function StationTable({
   min,
   max,
   region,
+  onNavigate,
   t,
 }: StationTableProps) {
   // Build a rank map from the original sorted-by-price stations
@@ -92,6 +96,7 @@ export function StationTable({
                 </th>
               ))}
               <th>{t("thVsAvg")}</th>
+              <th aria-label={t("navigate")}></th>
             </tr>
           </thead>
           <tbody>
@@ -114,6 +119,25 @@ export function StationTable({
                   </td>
                   <td style={{ color: "var(--text-tertiary)" }}>
                     {diffStr}&cent;
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="nav-link"
+                      title={t("navigate")}
+                      onClick={() =>
+                        onNavigate({
+                          lat: s.lat,
+                          lng: s.lng,
+                          label: `${s.brand} ${s.address}`,
+                          brand: s.brand,
+                          price: s.price,
+                        })
+                      }
+                    >
+                      <Navigation />
+                      <span>{t("navigate")}</span>
+                    </button>
                   </td>
                 </tr>
               );
