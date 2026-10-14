@@ -17,6 +17,7 @@ interface StationMapProps {
 }
 
 const CLUSTER_THRESHOLD = 300;
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY?.trim();
 
 function createMarkerIcon(color: string) {
   return L.divIcon({
@@ -93,6 +94,7 @@ export function StationMap({
   const geoPosRef = useRef(geoPos);
   const onNavigateRef = useRef(onNavigate);
   const [locating, setLocating] = useState(false);
+  const [basemapFailed, setBasemapFailed] = useState(false);
 
   useEffect(() => {
     geoPosRef.current = geoPos;
@@ -106,18 +108,30 @@ export function StationMap({
   // Initialize map once
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { zoomControl: true }).setView(
+    const map = L.map(containerRef.current, { zoomControl: true, maxZoom: 19 }).setView(
       [46.8, -71.2],
       7,
     );
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-        maxZoom: 19,
-      },
-    ).addTo(map);
+    if (CARTO_API_KEY) {
+      let tileLoadFailed = false;
+      L.tileLayer(
+        `https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_API_KEY)}`,
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attribution/">CARTO</a>',
+          maxZoom: 19,
+        },
+      )
+        .on("loading", () => {
+          tileLoadFailed = false;
+        })
+        .on("tileerror", () => {
+          tileLoadFailed = true;
+          setBasemapFailed(true);
+        })
+        .on("load", () => setBasemapFailed(tileLoadFailed))
+        .addTo(map);
+    }
 
     // Event delegation for nav buttons inside popups
     map.getContainer().addEventListener("click", (e) => {
@@ -309,6 +323,11 @@ export function StationMap({
   return (
     <div className="map-section anim-in anim-d2">
       <h2 className="section-title">{t("stationMap")}</h2>
+      {(!CARTO_API_KEY || basemapFailed) && (
+        <p className="map-notice" role="status">
+          {t("mapUnavailable")}
+        </p>
+      )}
       <div style={{ position: "relative" }}>
         <div
           ref={containerRef}
