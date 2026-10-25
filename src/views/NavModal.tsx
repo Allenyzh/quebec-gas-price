@@ -3,6 +3,8 @@ import { formatDist } from "../models/geo";
 import type { MapProvider } from "../models/geo";
 import type { NavTarget } from "../controllers/useNavModal";
 import { X } from 'lucide-react';
+import { useId, useRef } from "react";
+import { useModalFocus } from "../controllers/useModalFocus";
 
 interface NavModalProps {
   target: NavTarget;
@@ -17,15 +19,28 @@ const PROVIDERS: { key: MapProvider; name: string }[] = [
 ];
 
 export function NavModal({ target, t, onClose }: NavModalProps) {
-  const { lat, lng, label, brand, price, dist } = target;
+  const { lat, lng, label, brand, price, dist, fuelType } = target;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  useModalFocus(dialogRef, true, onClose);
   const distStr = dist != null ? ` | ${formatDist(dist)}` : "";
-  const subtitle = `${brand} ${price.toFixed(1)}\u00a2${distStr}`;
+  const subtitle = `${brand}${fuelType ? ` · ${fuelType}` : ""} · ${price.toFixed(1)}\u00a2/L${distStr}`;
 
   return (
     <div className="nav-modal-overlay" onClick={onClose}>
-      <div className="nav-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="nav-modal-title">{t("navigate")}</div>
-        <div className="nav-modal-subtitle">{subtitle}</div>
+      <div
+        className="nav-modal"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="nav-modal-title" id={titleId}>{t("navigate")}</h2>
+        <div className="nav-modal-subtitle" id={descriptionId}>{subtitle}</div>
         <div className="nav-modal-options">
           {PROVIDERS.map((p) => (
             <a
@@ -40,8 +55,8 @@ export function NavModal({ target, t, onClose }: NavModalProps) {
             </a>
           ))}
         </div>
-        <button className="nav-modal-cancel" onClick={onClose}>
-          <X />
+        <button type="button" className="nav-modal-cancel" onClick={onClose} aria-label={t("close")}>
+          <X aria-hidden="true" />
         </button>
       </div>
     </div>

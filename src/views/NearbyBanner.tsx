@@ -76,7 +76,7 @@ export function NearbyBanner({ state, t, onNavigate }: NearbyBannerProps) {
             {t("nearbyTitle").replace("{r}", String(radiusKm))}
           </div>
           <div className="nearby-price">
-            {cheapest.price.toFixed(1)}&cent;/L
+            {cheapest.price.toFixed(1)}&cent;/L · {cheapest.type}
           </div>
           <div className="nearby-detail">
             <strong>{cheapest.brand}</strong> &middot; {cheapest.address}
@@ -88,7 +88,7 @@ export function NearbyBanner({ state, t, onNavigate }: NearbyBannerProps) {
               type="button"
               className="nav-link"
               onClick={() =>
-                onNavigate({ lat: cheapest.lat, lng: cheapest.lng, label: cheapest.brand + " " + cheapest.address, brand: cheapest.brand, price: cheapest.price, dist: cheapest.dist })
+                onNavigate({ lat: cheapest.lat, lng: cheapest.lng, label: cheapest.brand + " " + cheapest.address, brand: cheapest.brand, price: cheapest.price, dist: cheapest.dist, fuelType: cheapest.type })
               }
             >
               <NavIcon /> {t("navigate")}
@@ -98,7 +98,7 @@ export function NearbyBanner({ state, t, onNavigate }: NearbyBannerProps) {
         <div className="nearby-others">
           {others.map((s, i) => (
             <div key={i} className="nearby-other">
-              <span className="other-price">{s.price.toFixed(1)}&cent;</span>
+              <span className="other-price">{s.price.toFixed(1)}&cent; · {s.type}</span>
               <span className="other-brand" title={s.brand}>
                 {s.brand}
               </span>
@@ -106,9 +106,10 @@ export function NearbyBanner({ state, t, onNavigate }: NearbyBannerProps) {
               <button
                 type="button"
                 className="nav-link"
+                aria-label={`${t("navigate")}: ${s.brand}, ${s.address}, ${s.type}`}
                 style={{ padding: "2px 8px", fontSize: "0.65rem", borderWidth: 1 }}
                 onClick={() =>
-                  onNavigate({ lat: s.lat, lng: s.lng, label: s.brand + " " + s.address, brand: s.brand, price: s.price, dist: s.dist })
+                  onNavigate({ lat: s.lat, lng: s.lng, label: s.brand + " " + s.address, brand: s.brand, price: s.price, dist: s.dist, fuelType: s.type })
                 }
               >
                 <NavIcon />

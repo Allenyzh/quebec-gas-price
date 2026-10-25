@@ -6,6 +6,7 @@ export interface NavTarget {
   label: string;
   brand: string;
   price: number;
+  fuelType?: string;
   dist?: number;
 }
 

@@ -1173,3 +1173,54 @@ tr:hover td {
     padding: 10px 12px;
   }
 }
+
+/* Keyboard controls and modal settings */
+.table-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.table-sort-btn:focus-visible,
+.nav-modal-option:focus-visible,
+.nav-modal-cancel:focus-visible,
+.consent-btn:focus-visible,
+.consent-reopen:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.station-fuel-type {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.75em;
+  font-weight: 400;
+}
+.price-neutral {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.consent-reopen[hidden] {
+  display: none;
+}
+.consent-location-toggle {
+  white-space: normal;
+  max-width: 100%;
+}
+.consent-location-toggle input {
+  flex-shrink: 0;
+}
+.consent-overlay {
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+.consent-banner {
+  max-height: 100%;
+  overflow-y: auto;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+}

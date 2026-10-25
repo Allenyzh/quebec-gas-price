@@ -17,8 +17,9 @@ interface GeoJsonResponse {
   features: GeoJsonFeature[];
 }
 
-export async function fetchStations(): Promise<Station[]> {
-  const resp = await fetch("https://regieessencequebec.ca/stations.geojson.gz");
+export async function fetchStations(signal?: AbortSignal): Promise<Station[]> {
+  const resp = await fetch("https://regieessencequebec.ca/stations.geojson.gz", { signal });
+  if (!resp.ok) throw new Error(`Station data request failed (${resp.status})`);
   const data: GeoJsonResponse = await resp.json();
 
   return data.features
@@ -41,25 +42,34 @@ export async function fetchStations(): Promise<Station[]> {
 
 interface OsrmTableResponse {
   code: string;
-  distances: number[][];
+  distances: Array<Array<number | null>>;
 }
 
 export async function fetchOsrmDistances(
   originLng: number,
   originLat: number,
-  destinations: Array<{ lng: number; lat: number }>
-): Promise<number[] | null> {
+  destinations: Array<{ lng: number; lat: number }>,
+  signal?: AbortSignal,
+): Promise<Array<number | null> | null> {
+  if (!destinations.length) return [];
   const coords =
     `${originLng},${originLat};` +
     destinations.map((d) => `${d.lng},${d.lat}`).join(";");
   try {
     const resp = await fetch(
-      `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance`
+      `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance`,
+      { signal },
     );
+    if (!resp.ok) return null;
     const data: OsrmTableResponse = await resp.json();
-    if (data.code !== "Ok") return null;
-    return data.distances[0].slice(1).map((d) => d / 1000);
-  } catch {
+    if (data.code !== "Ok" || !Array.isArray(data.distances?.[0])) return null;
+    const distances = data.distances[0].slice(1);
+    if (distances.length !== destinations.length) return null;
+    return distances.map((d) =>
+      typeof d === "number" && Number.isFinite(d) && d >= 0 ? d / 1000 : null,
+    );
+  } catch (err) {
+    if (signal?.aborted) throw err;
     return null;
   }
 }

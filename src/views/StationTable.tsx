@@ -18,6 +18,7 @@ interface StationTableProps {
   region: string;
   onNavigate: (target: NavTarget) => void;
   t: (key: string) => string;
+  comparePrices?: boolean;
 }
 
 const SORT_COLS: { key: SortCol; labelKey: string }[] = [
@@ -42,16 +43,17 @@ export function StationTable({
   region,
   onNavigate,
   t,
+  comparePrices = true,
 }: StationTableProps) {
   // Build a rank map from the original sorted-by-price stations
   const rankMap = new Map<Station, number>();
-  const sortedByPrice = [...stations].sort((a, b) => a.price - b.price);
+  const sortedByPrice = comparePrices ? [...stations].sort((a, b) => a.price - b.price) : [];
   sortedByPrice.forEach((s, i) => rankMap.set(s, i + 1));
 
   return (
     <div className="table-section anim-in anim-d3">
       <h2 className="section-title">
-        {t("allStations")}
+        {t(comparePrices ? "allStations" : "allFuelPrices")}
         {region && region !== "__all__" && (
           <span
             style={{
@@ -82,22 +84,25 @@ export function StationTable({
         <table>
           <thead>
             <tr>
-              <th data-col="rank" style={{ width: 44 }}>
+              {comparePrices && <th data-col="rank" scope="col" style={{ width: 44 }}>
                 #
-              </th>
+              </th>}
               {SORT_COLS.map((col) => (
                 <th
                   key={col.key}
                   data-col={col.key}
-                  onClick={() => onSort(col.key)}
+                  scope="col"
+                  aria-sort={sortCol === col.key ? (sortAsc ? "ascending" : "descending") : undefined}
                 >
-                  {t(col.labelKey)}{" "}
-                  <span className="sort-arrow">
-                    {sortCol === col.key ? (sortAsc ? "\u25B2" : "\u25BC") : ""}
-                  </span>
+                  <button type="button" className="table-sort-btn" onClick={() => onSort(col.key)}>
+                    {t(col.labelKey)}{" "}
+                    <span className="sort-arrow" aria-hidden="true">
+                      {sortCol === col.key ? (sortAsc ? "\u25B2" : "\u25BC") : ""}
+                    </span>
+                  </button>
                 </th>
               ))}
-              <th data-col="vsavg">{t("thVsAvg")}</th>
+              {comparePrices && <th data-col="vsavg" scope="col">{t("thVsAvg")}</th>}
               <th data-col="nav" aria-label={t("navigate")}></th>
             </tr>
           </thead>
@@ -110,25 +115,26 @@ export function StationTable({
                 diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
               return (
                 <tr key={`${s.brand}-${s.address}-${s.price}-${i}`}>
-                  <td data-col="rank">
+                  {comparePrices && <td data-col="rank">
                     <span className={`rank${rc}`}>{rankIdx}</span>
-                  </td>
-                  <td data-col="brand">{s.brand}</td>
+                  </td>}
+                  <td data-col="brand">{s.brand}<span className="station-fuel-type">{s.type}</span></td>
                   <td data-col="address">{s.address}</td>
                   <td data-col="region" style={{ color: "var(--text-tertiary)" }}>
                     {s.region}
                   </td>
-                  <td data-col="price" className={priceClass(s.price, min, max)}>
+                  <td data-col="price" className={comparePrices ? priceClass(s.price, min, max) : "price-neutral"}>
                     {s.price.toFixed(1)}&cent;
                   </td>
-                  <td data-col="vsavg" style={{ color: "var(--text-tertiary)" }}>
+                  {comparePrices && <td data-col="vsavg" style={{ color: "var(--text-tertiary)" }}>
                     {diffStr}&cent;
-                  </td>
+                  </td>}
                   <td data-col="nav">
                     <button
                       type="button"
                       className="nav-link"
                       title={t("navigate")}
+                      aria-label={`${t("navigate")} · ${s.brand} ${s.address} · ${s.type}`}
                       onClick={() =>
                         onNavigate({
                           lat: s.lat,
@@ -136,6 +142,7 @@ export function StationTable({
                           label: `${s.brand} ${s.address}`,
                           brand: s.brand,
                           price: s.price,
+                          fuelType: s.type,
                         })
                       }
                     >
