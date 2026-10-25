@@ -6,6 +6,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import type { Station, StationStats } from "../models/types";
 import type { NavTarget } from "../controllers/useNavModal";
 import { priceToColor } from "../models/geo";
+import { createMapRouteLoader } from "../models/mapRoutes";
 
 interface StationMapProps {
   stations: Station[];
@@ -13,7 +14,10 @@ interface StationMapProps {
   t: (key: string) => string;
   onNavigate: (target: NavTarget) => void;
   geoPos: { lat: number; lng: number } | null;
-  onGeoUpdate?: (pos: { lat: number; lng: number }) => void;
+  onLocateRequest?: () => void;
+  routingEnabled?: boolean;
+  comparePrices?: boolean;
+  locating?: boolean;
 }
 
 const CLUSTER_THRESHOLD = 300;
@@ -39,36 +43,10 @@ const userPosIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
-const routeCache = new Map<string, [number, number][]>();
-
-function routeCacheKey(
-  fromLat: number, fromLng: number, toLat: number, toLng: number,
-): string {
-  // Round to ~11m precision to avoid near-duplicate entries
-  const r = (n: number) => n.toFixed(4);
-  return `${r(fromLat)},${r(fromLng)};${r(toLat)},${r(toLng)}`;
-}
-
-async function fetchRoute(
-  fromLat: number, fromLng: number, toLat: number, toLng: number,
-): Promise<[number, number][] | null> {
-  const key = routeCacheKey(fromLat, fromLng, toLat, toLng);
-  const cached = routeCache.get(key);
-  if (cached) return cached;
-  try {
-    const resp = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`,
-    );
-    const data = await resp.json();
-    if (data.code !== "Ok" || !data.routes?.[0]) return null;
-    const coords = data.routes[0].geometry.coordinates.map(
-      ([lng, lat]: [number, number]) => [lat, lng] as [number, number],
-    );
-    routeCache.set(key, coords);
-    return coords;
-  } catch {
-    return null;
-  }
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]!);
 }
 
 function clearRoute(map: L.Map, ref: React.MutableRefObject<L.Polyline | null>) {
@@ -84,7 +62,10 @@ export function StationMap({
   t,
   onNavigate,
   geoPos,
-  onGeoUpdate,
+  onLocateRequest,
+  routingEnabled = true,
+  comparePrices = true,
+  locating = false,
 }: StationMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,12 +74,15 @@ export function StationMap({
   const routeRef = useRef<L.Polyline | null>(null);
   const geoPosRef = useRef(geoPos);
   const onNavigateRef = useRef(onNavigate);
-  const [locating, setLocating] = useState(false);
+  const locateRequestedRef = useRef(false);
+  const [routeLoader] = useState(createMapRouteLoader);
   const [basemapFailed, setBasemapFailed] = useState(false);
 
   useEffect(() => {
-    geoPosRef.current = geoPos;
-  }, [geoPos]);
+    geoPosRef.current = routingEnabled ? geoPos : null;
+    routeLoader.cancel();
+    if (mapRef.current) clearRoute(mapRef.current, routeRef);
+  }, [geoPos, routingEnabled, routeLoader]);
 
   // Keep ref in sync with prop
   useEffect(() => {
@@ -146,6 +130,7 @@ export function StationMap({
         label: btn.dataset.navLabel || "",
         brand: btn.dataset.navBrand || "",
         price: Number(btn.dataset.navPrice),
+        fuelType: btn.dataset.navType || "",
       });
     });
 
@@ -153,11 +138,13 @@ export function StationMap({
 
     // Route: draw on popup open, clear on popup close
     map.on("popupopen", (e: L.PopupEvent) => {
+      routeLoader.cancel();
+      clearRoute(map, routeRef);
       const latlng = e.popup.getLatLng();
       const geo = geoPosRef.current;
       if (!latlng || !geo) return;
-      fetchRoute(geo.lat, geo.lng, latlng.lat, latlng.lng).then((coords) => {
-        if (!coords) return;
+      routeLoader.load(geo, latlng).then((coords) => {
+        if (!coords || mapRef.current !== map || !e.popup.isOpen()) return;
         clearRoute(map, routeRef);
         routeRef.current = L.polyline(coords, {
           color: "#4285f4",
@@ -179,13 +166,18 @@ export function StationMap({
         }
       });
     });
-    map.on("popupclose", () => clearRoute(map, routeRef));
+    map.on("popupclose", () => {
+      routeLoader.cancel();
+      clearRoute(map, routeRef);
+    });
 
     return () => {
+      routeLoader.cancel();
+      clearRoute(map, routeRef);
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [routeLoader]);
 
   // Update markers when stations change
   useEffect(() => {
@@ -193,6 +185,8 @@ export function StationMap({
     if (!map) return;
 
     if (markersRef.current) {
+      routeLoader.cancel();
+      clearRoute(map, routeRef);
       map.removeLayer(markersRef.current);
       markersRef.current = null;
     }
@@ -202,32 +196,54 @@ export function StationMap({
 
     const { min, max, avg, total } = stats;
     const sortedByPrice = [...stations].sort((a, b) => a.price - b.price);
+    const rankMap = new Map(sortedByPrice.map((station, index) => [station, index + 1]));
+    const groups: Station[][] = [];
+    if (comparePrices) {
+      mapStations.forEach((station) => groups.push([station]));
+    } else {
+      // One popup exposes every fuel at a coordinate, rather than hiding pins
+      // beneath the last fuel marker added for the same station.
+      const byCoordinates = new Map<string, Station[]>();
+      mapStations.forEach((station) => {
+        const key = `${station.lat},${station.lng}`;
+        const group = byCoordinates.get(key);
+        if (group) group.push(station);
+        else byCoordinates.set(key, [station]);
+      });
+      groups.push(...byCoordinates.values());
+    }
 
-    function makeMarker(s: Station) {
-      const rankIdx = sortedByPrice.indexOf(s) + 1;
-      const color = priceToColor(s.price, min, max);
-      const diff = s.price - avg;
-      const diffStr = diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
-      const label = s.brand + " " + s.address;
+    function makeMarker(group: Station[]) {
+      const s = group[0];
+      const color = comparePrices ? priceToColor(s.price, min, max) : "#64748b";
       const marker = L.marker([s.lat, s.lng], {
         icon: createMarkerIcon(color),
+        title: `${s.brand} ${s.address}`,
       });
       (marker as unknown as Record<string, number>)._stationPrice = s.price;
+      const fuelEntries = group.map((station, index) => {
+        const rankIdx = rankMap.get(station) || 1;
+        const diff = station.price - avg;
+        const diffStr = diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
+        const label = escapeHtml(`${station.brand} ${station.address}`);
+        return `<section style="${index ? "border-top:1px solid #ddd;padding-top:10px;margin-top:10px" : ""}">
+          <div class="map-popup-brand">${escapeHtml(station.brand)}</div>
+          <div style="font-size:0.75rem;font-weight:600">${escapeHtml(station.type)}</div>
+          <div class="map-popup-price" style="color:${color}">${station.price.toFixed(1)}\u00a2/L</div>
+          <div class="map-popup-addr">${escapeHtml(station.address)}</div>
+          <div style="font-size:0.7rem;color:#888;margin-top:2px">${escapeHtml(station.region)}</div>
+          ${comparePrices ? `<div class="map-popup-rank" style="color:${color}">#${rankIdx}/${total} (${diffStr}\u00a2)</div>` : ""}
+          <div class="map-popup-nav"><button class="nav-link" data-nav-lat="${station.lat}" data-nav-lng="${station.lng}" data-nav-label="${label}" data-nav-brand="${escapeHtml(station.brand)}" data-nav-price="${station.price}" data-nav-type="${escapeHtml(station.type)}">${navSvg} ${escapeHtml(t("navigate"))}</button></div>
+        </section>`;
+      }).join("");
       marker.bindPopup(
-        `<div style="min-width:170px;font-family:Plus Jakarta Sans,system-ui,sans-serif">
-          <div class="map-popup-brand">${s.brand}</div>
-          <div class="map-popup-price" style="color:${color}">${s.price.toFixed(1)}\u00a2/L</div>
-          <div class="map-popup-addr">${s.address}</div>
-          <div style="font-size:0.7rem;color:#888;margin-top:2px">${s.region}</div>
-          <div class="map-popup-rank" style="background:${color}18;color:${color}">#${rankIdx}/${total} (${diffStr}\u00a2)</div>
-          <div class="map-popup-nav"><button class="nav-link" data-nav-lat="${s.lat}" data-nav-lng="${s.lng}" data-nav-label="${label.replace(/"/g, "&quot;")}" data-nav-brand="${s.brand.replace(/"/g, "&quot;")}" data-nav-price="${s.price}">${navSvg} ${t("navigate")}</button></div>
-        </div>`,
-        { closeButton: false },
+        `<div style="min-width:170px;font-family:Plus Jakarta Sans,system-ui,sans-serif">${fuelEntries}</div>`,
+        { closeButton: false, maxHeight: 320 },
       );
       return marker;
     }
 
-    const useCluster = mapStations.length > CLUSTER_THRESHOLD;
+    const useCluster = groups.length > CLUSTER_THRESHOLD;
 
     if (useCluster) {
       const cluster = L.markerClusterGroup({
@@ -239,31 +255,31 @@ export function StationMap({
         iconCreateFunction: (clusterObj) => {
           const children = clusterObj.getAllChildMarkers();
           const count = children.length;
-          const sorted = children
+          const sorted = comparePrices ? children
             .map((m) => (m as unknown as Record<string, number>)._stationPrice)
-            .sort((a, b) => a - b);
+            .sort((a, b) => a - b) : [];
           const medP =
-            count % 2 === 0
+            !comparePrices ? 0 : count % 2 === 0
               ? (sorted[count / 2 - 1] + sorted[count / 2]) / 2
               : sorted[Math.floor(count / 2)];
-          const bg = priceToColor(medP, min, max);
+          const bg = comparePrices ? priceToColor(medP, min, max) : "#64748b";
           const size = count < 20 ? 40 : count < 100 ? 48 : 56;
           return L.divIcon({
             html: `<div class="marker-cluster-custom" style="width:${size}px;height:${size}px;background:${bg}">
               <span class="cluster-count">${count}</span>
-              <span class="cluster-price">${t("clusterMed")} ${medP.toFixed(1)}\u00a2</span>
+              ${comparePrices ? `<span class="cluster-price">${escapeHtml(t("clusterMed"))} ${medP.toFixed(1)}\u00a2</span>` : ""}
             </div>`,
             className: "",
             iconSize: L.point(size, size),
           });
         },
       });
-      mapStations.forEach((s) => cluster.addLayer(makeMarker(s)));
+      groups.forEach((group) => cluster.addLayer(makeMarker(group)));
       map.addLayer(cluster);
       markersRef.current = cluster;
     } else {
       const group = L.layerGroup();
-      mapStations.forEach((s) => makeMarker(s).addTo(group));
+      groups.forEach((stationsAtPin) => makeMarker(stationsAtPin).addTo(group));
       group.addTo(map);
       markersRef.current = group;
     }
@@ -275,7 +291,7 @@ export function StationMap({
       ),
       { padding: [30, 30] },
     );
-  }, [stations, stats, t]);
+  }, [stations, stats, t, comparePrices, routeLoader]);
 
   // Show user position dot on map
   useEffect(() => {
@@ -285,40 +301,28 @@ export function StationMap({
       map.removeLayer(userMarkerRef.current);
       userMarkerRef.current = null;
     }
-    if (geoPos) {
+    if (routingEnabled && geoPos) {
       userMarkerRef.current = L.marker([geoPos.lat, geoPos.lng], {
         icon: userPosIcon,
         zIndexOffset: 9999,
         interactive: false,
       }).addTo(map);
+      if (locateRequestedRef.current) {
+        map.setView([geoPos.lat, geoPos.lng], 13, { animate: true });
+        locateRequestedRef.current = false;
+      }
     }
-  }, [geoPos]);
+  }, [geoPos, routingEnabled]);
 
   const handleLocate = useCallback(() => {
-    if (!navigator.geolocation || !mapRef.current) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        const { latitude: lat, longitude: lng } = pos.coords;
-        const map = mapRef.current;
-        if (!map) return;
-        // Update user marker
-        if (userMarkerRef.current) map.removeLayer(userMarkerRef.current);
-        userMarkerRef.current = L.marker([lat, lng], {
-          icon: userPosIcon,
-          zIndexOffset: 9999,
-          interactive: false,
-        }).addTo(map);
-        map.setView([lat, lng], 13, { animate: true });
-        onGeoUpdate?.({ lat, lng });
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
-  }, [onGeoUpdate]);
+    if (locating) return;
+    locateRequestedRef.current = true;
+    onLocateRequest?.();
+  }, [onLocateRequest, locating]);
 
-  const mapStationCount = stations.filter((s) => s.lat && s.lng).length;
+  const mapStationCount = comparePrices
+    ? stations.filter((s) => s.lat && s.lng).length
+    : new Set(stations.filter((s) => s.lat && s.lng).map((s) => `${s.lat},${s.lng}`)).size;
 
   return (
     <div className="map-section anim-in anim-d2">
@@ -342,8 +346,10 @@ export function StationMap({
         <button
           className={`locate-btn${locating ? " locating" : ""}`}
           onClick={handleLocate}
-          title="My location"
-          aria-label="My location"
+          aria-disabled={locating}
+          aria-busy={locating}
+          title={t("myLocation")}
+          aria-label={t("myLocation")}
         >
           <svg viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="3" />
@@ -353,9 +359,11 @@ export function StationMap({
         </button>
       </div>
       <div className="map-legend">
-        <span>{t("legendLow")}</span>
-        <div className="legend-gradient" />
-        <span>{t("legendHigh")}</span>
+        {comparePrices && <>
+          <span>{t("legendLow")}</span>
+          <div className="legend-gradient" />
+          <span>{t("legendHigh")}</span>
+        </>}
         <span style={{ marginLeft: "auto" }}>
           {mapStationCount} {t("pins")}
         </span>

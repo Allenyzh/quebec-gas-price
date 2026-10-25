@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { Station, Lang } from "../models/types";
 import { fetchStations } from "../models/api";
 import {
@@ -18,8 +18,11 @@ export function useStations() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
+  const hasLoadedDataRef = useRef(false);
+  const activeLoadRef = useRef<AbortController | null>(null);
   const [lang, setLangState] = useState<Lang>(getSavedLang);
-  const [gasType, setGasType] = useState("__all__");
+  const [gasType, setGasType] = useState("");
   const [region, setRegion] = useState("__all__");
   const [radiusKm, setRadiusKm] = useState(5);
 
@@ -36,15 +39,32 @@ export function useStations() {
   }, [lang]);
 
   const loadData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
+    activeLoadRef.current?.abort();
+    const controller = new AbortController();
+    activeLoadRef.current = controller;
+    if (!hasLoadedDataRef.current) setLoading(true);
+    setRefreshing(isRefresh);
     setError(null);
     const spinStart = Date.now();
     try {
-      const data = await fetchStations();
+      const data = await fetchStations(controller.signal);
+      if (controller.signal.aborted) return;
       setAllStations(data);
+      hasLoadedDataRef.current = true;
+      setHasLoadedData(true);
       const types = getGasTypes(data);
-      setGasType(defaultGasType(types));
+      setGasType((current) =>
+        current === "__all__" || types.includes(current)
+          ? current
+          : defaultGasType(types),
+      );
+      setRegion((current) =>
+        current === "__all__" || data.some((station) => station.region === current)
+          ? current
+          : "__all__",
+      );
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       // Ensure spinner completes at least one full rotation (700ms)
@@ -53,13 +73,16 @@ export function useStations() {
       if (isRefresh && remaining > 0) {
         await new Promise((r) => setTimeout(r, remaining));
       }
-      setLoading(false);
-      setRefreshing(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     loadData();
+    return () => activeLoadRef.current?.abort();
   }, [loadData]);
 
   const gasTypes = useMemo(() => getGasTypes(allStations), [allStations]);
@@ -117,6 +140,7 @@ export function useStations() {
     loading,
     refreshing,
     error,
+    hasLoadedData,
     lang,
     setLang,
     t,

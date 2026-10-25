@@ -18,6 +18,7 @@ interface HeaderProps {
   onRadiusChange: (km: number) => void;
   onRefresh: () => void;
   refreshing: boolean;
+  loading?: boolean;
   subtitle: string;
 }
 
@@ -42,6 +43,7 @@ export function Header({
   onRadiusChange,
   onRefresh,
   refreshing,
+  loading = false,
   subtitle,
 }: HeaderProps) {
   return (
@@ -71,7 +73,7 @@ export function Header({
           className={`refresh-btn${refreshing ? " spinning" : ""}`}
           aria-label={t("refresh")}
           title={t("refresh")}
-          disabled={refreshing}
+          disabled={refreshing || loading}
           onClick={onRefresh}
         >
           <RefreshIcon />
@@ -79,6 +81,7 @@ export function Header({
         <select
           className="region-select"
           aria-label={t("selectFuel")}
+          disabled={loading}
           value={gasType}
           onChange={(e) => onGasTypeChange(e.target.value)}
         >
@@ -92,6 +95,7 @@ export function Header({
         <select
           className="region-select"
           aria-label={t("selectRegion")}
+          disabled={loading}
           value={region}
           onChange={(e) => onRegionChange(e.target.value)}
         >
@@ -100,7 +104,6 @@ export function Header({
           </option>
           {regions.map((r) => {
             const count = regionStationCounts[r] || 0;
-            if (count === 0) return null;
             return (
               <option key={r} value={r}>
                 {r} ({count})
@@ -111,6 +114,7 @@ export function Header({
         <select
           className="region-select"
           aria-label={t("nearbyRadius")}
+          disabled={loading}
           value={radiusKm}
           onChange={(e) => onRadiusChange(Number(e.target.value))}
         >

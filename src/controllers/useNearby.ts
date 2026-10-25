@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { Station, StationWithDist } from "../models/types";
 import { haversine } from "../models/geo";
 import { fetchOsrmDistances } from "../models/api";
@@ -15,104 +15,165 @@ export type NearbyState =
       radiusKm: number;
     };
 
+interface GeoPosition {
+  lat: number;
+  lng: number;
+}
+
+interface LocationSession {
+  enabled: boolean;
+}
+
+type LocationResult =
+  | { session: LocationSession; status: "ok"; position: GeoPosition }
+  | { session: LocationSession; status: "error" };
+
+interface NearbyResult {
+  session: LocationSession;
+  stations: Station[];
+  radiusKm: number;
+  position: GeoPosition;
+  state: NearbyState;
+}
+
 export function useNearby(
   gasStations: Station[],
   radiusKm: number,
-  onRegionDetected?: (region: string) => void
+  onRegionDetected?: (region: string) => void,
+  locationEnabled = true,
 ) {
-  const [state, setState] = useState<NearbyState>({ status: "idle" });
-  const [geoPos, setGeoPos] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
-  const geoPosRef = useRef(geoPos);
-  geoPosRef.current = geoPos;
+  // A new permission session never reuses a position from before it was disabled.
+  const session = useMemo(() => ({ enabled: locationEnabled }), [locationEnabled]);
+  const activeSessionRef = useRef<LocationSession | null>(null);
+  const locationAttemptRef = useRef<object | null>(null);
+  const hasDetectedRegionRef = useRef(false);
+  const [locationResult, setLocationResult] = useState<LocationResult | null>(null);
+  const [nearbyResult, setNearbyResult] = useState<NearbyResult | null>(null);
+  const locationSupported = typeof navigator !== "undefined" && !!navigator.geolocation;
 
-  const computeNearby = useCallback(
-    async (lat: number, lng: number) => {
-      setState({ status: "loading" });
+  const currentLocation = locationEnabled && locationResult?.session === session
+    ? locationResult
+    : null;
+  const geoPos = currentLocation?.status === "ok" ? currentLocation.position : null;
 
-      const withDist = gasStations
-        .filter((s) => s.lat && s.lng)
-        .map((s) => ({
-          ...s,
-          dist: haversine(lat, lng, s.lat, s.lng),
-        }));
+  const setGeoPos = useCallback((position: GeoPosition) => {
+    if (!locationEnabled || activeSessionRef.current !== session) return;
+    // Also invalidate a pending browser request when the position is set explicitly.
+    locationAttemptRef.current = null;
+    setLocationResult({ session, status: "ok", position });
+  }, [locationEnabled, session]);
 
-      // Auto-detect nearest region
-      const nearest = [...withDist].sort((a, b) => a.dist - b.dist)[0];
-      if (nearest?.region && onRegionDetected) {
-        onRegionDetected(nearest.region);
-      }
-
-      const inRadius = withDist.filter((s) => s.dist <= radiusKm);
-      if (!inRadius.length) {
-        setState({ status: "none", radiusKm });
-        return;
-      }
-
-      const candidates = inRadius
-        .sort((a, b) => a.price - b.price)
-        .slice(0, 50);
-
-      const osrmDists = await fetchOsrmDistances(
-        lng,
-        lat,
-        candidates.map((s) => ({ lng: s.lng, lat: s.lat }))
-      );
-
-      if (osrmDists) {
-        const top5 = candidates
-          .map((s, i) => ({ ...s, dist: osrmDists[i] }))
-          .filter((s) => s.dist <= radiusKm)
-          .sort((a, b) => a.price - b.price || a.dist - b.dist)
-          .slice(0, 5);
-        if (!top5.length) {
-          setState({ status: "none", radiusKm });
-          return;
-        }
-        setState({ status: "ok", top5, straightLine: false, radiusKm });
-      } else {
-        const top5 = candidates.slice(0, 5);
-        setState({ status: "ok", top5, straightLine: true, radiusKm });
-      }
-    },
-    [gasStations, radiusKm, onRegionDetected]
-  );
-
-  // Request geolocation on mount
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setState({
-        status: "error",
-        message: "nearbyError",
-      });
-      return;
-    }
-
+  const requestLocation = useCallback(() => {
+    if (!locationEnabled || !locationSupported || activeSessionRef.current !== session) return;
+    const attempt = {};
+    locationAttemptRef.current = attempt;
+    const isCurrent = () => activeSessionRef.current === session && locationAttemptRef.current === attempt;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setGeoPos({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+        if (!isCurrent()) return;
+        setLocationResult({
+          session,
+          status: "ok",
+          position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
         });
       },
       () => {
-        setState({
-          status: "error",
-          message: "nearbyError",
-        });
+        if (isCurrent()) setLocationResult({ session, status: "error" });
       },
-      { enableHighAccuracy: false, timeout: 8000 }
+      { enableHighAccuracy: false, timeout: 8000 },
     );
-  }, []);
+  }, [locationEnabled, locationSupported, session]);
 
-  // Recompute when geoPos, gasStations, or radius changes
   useEffect(() => {
-    if (geoPos && gasStations.length > 0) {
-      computeNearby(geoPos.lat, geoPos.lng);
-    }
-  }, [geoPos, computeNearby]);
+    if (!locationEnabled) return;
+    activeSessionRef.current = session;
+    requestLocation();
+    return () => {
+      activeSessionRef.current = null;
+      locationAttemptRef.current = null;
+    };
+  }, [locationEnabled, session, requestLocation]);
 
-  return { state, geoPos, setGeoPos };
+  useEffect(() => {
+    if (!locationEnabled || !geoPos || !gasStations.length) return;
+    const position = geoPos;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const publish = (state: NearbyState) => {
+      if (!signal.aborted) {
+        setNearbyResult({ session, stations: gasStations, radiusKm, position, state });
+      }
+    };
+
+    async function computeNearby() {
+      const withDist = gasStations
+        .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng) && s.lat !== 0 && s.lng !== 0)
+        .map((s) => ({ ...s, dist: haversine(position.lat, position.lng, s.lat, s.lng) }));
+
+      // Initialize the region once; later filter and radius changes preserve user choices.
+      const nearest = [...withDist].sort((a, b) => a.dist - b.dist)[0];
+      if (!hasDetectedRegionRef.current && nearest?.region && onRegionDetected) {
+        hasDetectedRegionRef.current = true;
+        onRegionDetected(nearest.region);
+      }
+
+      const candidates = withDist
+        .filter((s) => s.dist <= radiusKm)
+        .sort((a, b) => a.price - b.price || a.dist - b.dist)
+        .slice(0, 50);
+      if (!candidates.length) {
+        publish({ status: "none", radiusKm });
+        return;
+      }
+
+      try {
+        const osrmDists = await fetchOsrmDistances(
+          position.lng,
+          position.lat,
+          candidates.map((s) => ({ lng: s.lng, lat: s.lat })),
+          signal,
+        );
+        if (signal.aborted) return;
+        if (osrmDists) {
+          const top5: StationWithDist[] = candidates
+            .flatMap((s, i) => {
+              const dist = osrmDists[i];
+              return typeof dist === "number" && Number.isFinite(dist) && dist >= 0 && dist <= radiusKm
+                ? [{ ...s, dist }]
+                : [];
+            })
+            .sort((a, b) => a.price - b.price || a.dist - b.dist)
+            .slice(0, 5);
+          publish(top5.length
+            ? { status: "ok", top5, straightLine: false, radiusKm }
+            : { status: "none", radiusKm });
+        } else {
+          publish({ status: "ok", top5: candidates.slice(0, 5), straightLine: true, radiusKm });
+        }
+      } catch {
+        // Cancellation belongs to the previous inputs and must not publish a fallback.
+        if (!signal.aborted) {
+          publish({ status: "ok", top5: candidates.slice(0, 5), straightLine: true, radiusKm });
+        }
+      }
+    }
+
+    void computeNearby();
+    return () => controller.abort();
+  }, [locationEnabled, session, geoPos, gasStations, radiusKm, onRegionDetected]);
+
+  // Match the inputs during render, so stale prices disappear before effect cleanup runs.
+  let state: NearbyState;
+  if (!locationEnabled || !gasStations.length) {
+    state = { status: "idle" };
+  } else if (!locationSupported || currentLocation?.status === "error") {
+    state = { status: "error", message: "nearbyError" };
+  } else if (nearbyResult?.session === session && nearbyResult.stations === gasStations
+    && nearbyResult.radiusKm === radiusKm && nearbyResult.position === geoPos) {
+    state = nearbyResult.state;
+  } else {
+    state = { status: "loading" };
+  }
+
+  return { state, geoPos, setGeoPos, requestLocation };
 }
